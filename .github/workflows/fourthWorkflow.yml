@@ -1,133 +1,130 @@
-name: Cache and Artifact Demo
+name: Fourth Flow Artifact and Cache Demo
 
 on:
-  # push:
   workflow_dispatch:
 
 jobs:
 
-  # ---------------------------------------------------------
-  # JOB 1: BUILD
-  # ---------------------------------------------------------
+  # ==========================================================
+  # BUILD JOB
+  # ==========================================================
   build:
-    name: Build on Node ${{ matrix.node-version }}
-
-    # Matrix creates multiple versions of the same job.
-    # Each matrix combination runs independently.
-    strategy:
-      matrix:
-        node-version: [20, 22]
 
     runs-on: ubuntu-latest
 
+    strategy:
+      matrix:
+        node-version: [20.x, 22.x]
+
     steps:
 
-      # -----------------------------------------------------
-      # Checkout source code
-      # -----------------------------------------------------
-      - name: Checkout repository
-        uses: actions/checkout@v4
+    # --------------------------------------------------------
+    # 1. CHECKOUT
+    # --------------------------------------------------------
+    - name: Checkout repository
+      uses: actions/checkout@v4
 
-      # -----------------------------------------------------
-      # Install Node.js
-      # -----------------------------------------------------
-      - name: Setup Node.js
-        uses: actions/setup-node@v4
-        with:
-          node-version: ${{ matrix.node-version }}
+    # --------------------------------------------------------
+    # 2. SETUP NODE
+    # --------------------------------------------------------
+    - name: Setup Node.js
+      uses: actions/setup-node@v4
+      with:
+        node-version: ${{ matrix.node-version }}
 
-      # -----------------------------------------------------
-      # CACHE DEPENDENCIES
-      # -----------------------------------------------------
-      - name: Cache npm dependencies
-        uses: actions/cache@v4
-        with:
-          # Cache the npm download cache rather than the
-          # generated node_modules directory.
-          path: ~/.npm
+    # --------------------------------------------------------
+    # 3. CACHE NPM
+    # --------------------------------------------------------
+    - name: Cache npm dependencies
+      uses: actions/cache@v4
+      with:
 
-          # The key identifies a specific cache.
-          #
-          # Example:
-          # Linux + Node 20 + package-lock.json hash
-          #
-          # If package-lock.json changes, the hash changes,
-          # resulting in a new cache.
-          key: ${{ runner.os }}-node-${{ matrix.node-version }}-npm-${{ hashFiles('package-lock.json') }}
+        # Location of npm's downloaded package cache
+        path: ~/.npm
 
-          # If the exact key does not exist, GitHub can look
-          # for a previously created cache with this prefix.
-          restore-keys: |
-            ${{ runner.os }}-node-${{ matrix.node-version }}-npm-
+        # Create a unique cache key based on:
+        #   Operating System
+        #   Node.js version
+        #   package-lock.json contents
+        #
+        # If package-lock.json changes, the hash changes,
+        # resulting in a new cache.
+        key: ${{ runner.os }}-node-${{ matrix.node-version }}-npm-${{ hashFiles('package-lock.json') }}
 
-      # -----------------------------------------------------
-      # Install dependencies
-      # -----------------------------------------------------
-      - name: Install dependencies
-        run: npm install
+        # If an exact cache key is unavailable,
+        # GitHub can restore a cache beginning with
+        # this prefix.
+        restore-keys: |
+          ${{ runner.os }}-node-${{ matrix.node-version }}-npm-
 
-      # -----------------------------------------------------
-      # BUILD APPLICATION
-      # -----------------------------------------------------
-      - name: Build application
-        run: npm run build
+    # --------------------------------------------------------
+    # 4. INSTALL DEPENDENCIES
+    # --------------------------------------------------------
+    - name: Install dependencies
+      run: npm ci
 
-      # -----------------------------------------------------
-      # UPLOAD ARTIFACT
-      # -----------------------------------------------------
-      - name: Upload build artifact
-        uses: actions/upload-artifact@v4
-        with:
-          # Give the artifact a unique name because the
-          # build job runs twice due to the matrix.
-          name: website-${{ matrix.node-version }}
+    # --------------------------------------------------------
+    # 5. BUILD
+    # --------------------------------------------------------
+    - name: Build application
+      run: npm run build
 
-          # Everything inside dist/ becomes part of the
-          # persisted artifact.
-          path: dist/
+    # --------------------------------------------------------
+    # 6. UPLOAD ARTIFACT
+    # --------------------------------------------------------
+    - name: Upload build artifact
+      uses: actions/upload-artifact@v4
+      with:
+
+        # Each matrix execution gets its own artifact.
+        name: build-${{ matrix.node-version }}
+
+        # Upload everything generated inside dist/
+        path: dist/
 
 
-  # ---------------------------------------------------------
-  # JOB 2: DEPLOY / CONSUME ARTIFACT
-  # ---------------------------------------------------------
-  deploy:
-    name: Download and inspect artifacts
+  # ==========================================================
+  # VERIFY JOB
+  # ==========================================================
+  verify:
 
-    # This job starts only after ALL matrix instances of
-    # the build job have completed successfully.
+    # This creates a dependency between jobs.
+    #
+    # The verify job will start only after ALL matrix
+    # executions of the build job have completed.
     needs: build
 
     runs-on: ubuntu-latest
 
     steps:
 
-      # -----------------------------------------------------
-      # DOWNLOAD ARTIFACT
-      # -----------------------------------------------------
-      - name: Download Node 20 artifact
-        uses: actions/download-artifact@v5
-        with:
-          name: website-20
-          path: downloaded/node-20
+    # --------------------------------------------------------
+    # 7. DOWNLOAD ARTIFACT
+    # --------------------------------------------------------
+    - name: Download Node 20 artifact
+      uses: actions/download-artifact@v5
+      with:
+        name: build-20.x
+        path: downloaded/node-20
 
-      - name: Download Node 22 artifact
-        uses: actions/download-artifact@v5
-        with:
-          name: website-22
-          path: downloaded/node-22
+    - name: Download Node 22 artifact
+      uses: actions/download-artifact@v5
+      with:
+        name: build-22.x
+        path: downloaded/node-22
 
-      # -----------------------------------------------------
-      # Verify files received from the build jobs
-      # -----------------------------------------------------
-      - name: Display downloaded artifacts
-        run: |
-          echo "Downloaded files:"
-          find downloaded -type f -print
+    # --------------------------------------------------------
+    # 8. VERIFY ARTIFACT CONTENT
+    # --------------------------------------------------------
+    - name: Display downloaded files
+      run: |
+        echo "Downloaded artifacts:"
+        find downloaded -type f
 
-          echo ""
-          echo "Node 20 build report:"
-          cat downloaded/node-20/build-report.txt
+        echo ""
+        echo "Node 20 build:"
+        cat downloaded/node-20/build-info.txt
 
-          echo ""
-          echo "Node 22 build report:"
-          cat downloaded/node-22/build-report.txt
+        echo ""
+        echo "Node 22 build:"
+        cat downloaded/node-22/build-info.txt
