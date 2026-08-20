@@ -1,7 +1,7 @@
 name: Cache and Artifact Demo
 
 on:
-  push:
+  # push:
   workflow_dispatch:
 
 jobs:
