@@ -1,0 +1,38 @@
+name:  Second Workflow
+
+on:
+  workflow_dispatch:
+  push:
+
+jobs:
+  Hello-Job:
+    runs-on:  ubuntu-latest
+    steps:
+      - name: Hello World
+        run:  echo "Hello World"
+      - name:  Multi-line bash
+        run:  | 
+          echo  "I am"
+          echo  "a multi-line"
+          echo  "script."
+          
+  echo-goodbye:
+      # needs:  Hello-Job
+      runs-on:  ubuntu-slim
+      steps:
+         - name:  Say Goodbye
+           run:  echo "Goodbye! ......"
+         - name: Event name
+           run: |
+             echo "Event name: ${{ github.event_name }}"
+
+  windows-echo:
+      if: github.event_name == 'push' 
+      runs-on:  windows-latest
+      steps:
+        - name:  Show OS
+          shell: bash
+          run:  | 
+            echo  "The job is running on an Windows runner."
+            echo  "Runner OS: $RUNNER_OS"
+  
