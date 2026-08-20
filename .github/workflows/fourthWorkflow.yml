@@ -1,0 +1,133 @@
+name: Cache and Artifact Demo
+
+on:
+  push:
+  workflow_dispatch:
+
+jobs:
+
+  # ---------------------------------------------------------
+  # JOB 1: BUILD
+  # ---------------------------------------------------------
+  build:
+    name: Build on Node ${{ matrix.node-version }}
+
+    # Matrix creates multiple versions of the same job.
+    # Each matrix combination runs independently.
+    strategy:
+      matrix:
+        node-version: [20, 22]
+
+    runs-on: ubuntu-latest
+
+    steps:
+
+      # -----------------------------------------------------
+      # Checkout source code
+      # -----------------------------------------------------
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      # -----------------------------------------------------
+      # Install Node.js
+      # -----------------------------------------------------
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ matrix.node-version }}
+
+      # -----------------------------------------------------
+      # CACHE DEPENDENCIES
+      # -----------------------------------------------------
+      - name: Cache npm dependencies
+        uses: actions/cache@v4
+        with:
+          # Cache the npm download cache rather than the
+          # generated node_modules directory.
+          path: ~/.npm
+
+          # The key identifies a specific cache.
+          #
+          # Example:
+          # Linux + Node 20 + package-lock.json hash
+          #
+          # If package-lock.json changes, the hash changes,
+          # resulting in a new cache.
+          key: ${{ runner.os }}-node-${{ matrix.node-version }}-npm-${{ hashFiles('package-lock.json') }}
+
+          # If the exact key does not exist, GitHub can look
+          # for a previously created cache with this prefix.
+          restore-keys: |
+            ${{ runner.os }}-node-${{ matrix.node-version }}-npm-
+
+      # -----------------------------------------------------
+      # Install dependencies
+      # -----------------------------------------------------
+      - name: Install dependencies
+        run: npm install
+
+      # -----------------------------------------------------
+      # BUILD APPLICATION
+      # -----------------------------------------------------
+      - name: Build application
+        run: npm run build
+
+      # -----------------------------------------------------
+      # UPLOAD ARTIFACT
+      # -----------------------------------------------------
+      - name: Upload build artifact
+        uses: actions/upload-artifact@v4
+        with:
+          # Give the artifact a unique name because the
+          # build job runs twice due to the matrix.
+          name: website-${{ matrix.node-version }}
+
+          # Everything inside dist/ becomes part of the
+          # persisted artifact.
+          path: dist/
+
+
+  # ---------------------------------------------------------
+  # JOB 2: DEPLOY / CONSUME ARTIFACT
+  # ---------------------------------------------------------
+  deploy:
+    name: Download and inspect artifacts
+
+    # This job starts only after ALL matrix instances of
+    # the build job have completed successfully.
+    needs: build
+
+    runs-on: ubuntu-latest
+
+    steps:
+
+      # -----------------------------------------------------
+      # DOWNLOAD ARTIFACT
+      # -----------------------------------------------------
+      - name: Download Node 20 artifact
+        uses: actions/download-artifact@v5
+        with:
+          name: website-20
+          path: downloaded/node-20
+
+      - name: Download Node 22 artifact
+        uses: actions/download-artifact@v5
+        with:
+          name: website-22
+          path: downloaded/node-22
+
+      # -----------------------------------------------------
+      # Verify files received from the build jobs
+      # -----------------------------------------------------
+      - name: Display downloaded artifacts
+        run: |
+          echo "Downloaded files:"
+          find downloaded -type f -print
+
+          echo ""
+          echo "Node 20 build report:"
+          cat downloaded/node-20/build-report.txt
+
+          echo ""
+          echo "Node 22 build report:"
+          cat downloaded/node-22/build-report.txt
