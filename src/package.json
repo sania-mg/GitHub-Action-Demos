@@ -1,0 +1,12 @@
+{
+  "name": "github-actions-node-demo",
+  "version": "1.0.0",
+  "description": "Demo project for GitHub Actions CI, caching and artifacts",
+  "main": "src/index.js",
+  "scripts": {
+    "build": "mkdir -p dist && cp src/index.js dist/index.js && echo \"Build completed successfully\" > dist/build-info.txt",
+    "test": "node --test src/index.test.js"
+  },
+  "dependencies": {},
+  "devDependencies": {}
+}
