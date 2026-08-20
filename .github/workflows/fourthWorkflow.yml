@@ -1,4 +1,6 @@
-name: Fourth Flow Artifact and Cache Demo
+
+name: Fourth Workflow - Cache and Artifact Demo
+
 
 on:
   workflow_dispatch:
@@ -12,75 +14,92 @@ jobs:
 
     runs-on: ubuntu-latest
 
-    strategy:
-      matrix:
-        node-version: [20.x, 22.x]
-
     steps:
 
-    # --------------------------------------------------------
-    # 1. CHECKOUT
-    # --------------------------------------------------------
-    - name: Checkout repository
-      uses: actions/checkout@v4
+      # --------------------------------------------------------
+      # 1. Checkout source code
+      # --------------------------------------------------------
+      - name: Checkout repository
+        uses: actions/checkout@v4
 
-    # --------------------------------------------------------
-    # 2. SETUP NODE
-    # --------------------------------------------------------
-    - name: Setup Node.js
-      uses: actions/setup-node@v4
-      with:
-        node-version: ${{ matrix.node-version }}
 
-    # --------------------------------------------------------
-    # 3. CACHE NPM
-    # --------------------------------------------------------
-    - name: Cache npm dependencies
-      uses: actions/cache@v4
-      with:
+      # --------------------------------------------------------
+      # 2. Setup Node.js
+      # --------------------------------------------------------
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: "22.x"
 
-        # Location of npm's downloaded package cache
-        path: ~/.npm
 
-        # Create a unique cache key based on:
-        #   Operating System
-        #   Node.js version
-        #   package-lock.json contents
-        #
-        # If package-lock.json changes, the hash changes,
-        # resulting in a new cache.
-        key: ${{ runner.os }}-node-${{ matrix.node-version }}-npm-${{ hashFiles('package-lock.json') }}
+      # --------------------------------------------------------
+      # 3. CACHE
+      #
+      # Cache stores npm's downloaded packages so that
+      # subsequent workflow runs can reuse them.
+      # --------------------------------------------------------
+      - name: Cache npm packages
+        uses: actions/cache@v4
+        with:
 
-        # If an exact cache key is unavailable,
-        # GitHub can restore a cache beginning with
-        # this prefix.
-        restore-keys: |
-          ${{ runner.os }}-node-${{ matrix.node-version }}-npm-
+          # Location being cached
+          path: ~/.npm
 
-    # --------------------------------------------------------
-    # 4. INSTALL DEPENDENCIES
-    # --------------------------------------------------------
-    - name: Install dependencies
-      run: npm ci
+          # Unique cache key
+          #
+          # The key changes when:
+          # - OS changes
+          # - Node version changes
+          # - package-lock.json changes
+          key: ${{ runner.os }}-node-22-npm-${{ hashFiles('package-lock.json') }}
 
-    # --------------------------------------------------------
-    # 5. BUILD
-    # --------------------------------------------------------
-    - name: Build application
-      run: npm run build
+          # If exact key doesn't exist, GitHub can look
+          # for an older cache with this prefix.
+          restore-keys: |
+            ${{ runner.os }}-node-22-npm-
 
-    # --------------------------------------------------------
-    # 6. UPLOAD ARTIFACT
-    # --------------------------------------------------------
-    - name: Upload build artifact
-      uses: actions/upload-artifact@v4
-      with:
 
-        # Each matrix execution gets its own artifact.
-        name: build-${{ matrix.node-version }}
+      # --------------------------------------------------------
+      # 4. Install dependencies
+      # --------------------------------------------------------
+      - name: Install dependencies
+        run: npm ci
 
-        # Upload everything generated inside dist/
-        path: dist/
+
+      # --------------------------------------------------------
+      # 5. Test application
+      # --------------------------------------------------------
+      - name: Run tests
+        run: npm test
+
+
+      # --------------------------------------------------------
+      # 6. CREATE DEPLOYMENT PACKAGE
+      #
+      # This is the data that we want to pass to another job.
+      # --------------------------------------------------------
+      - name: Prepare application package
+        run: |
+          mkdir deployment
+
+          cp package.json deployment/
+          cp package-lock.json deployment/
+
+          mkdir deployment/src
+          cp src/server.js deployment/src/
+
+
+      # --------------------------------------------------------
+      # 7. UPLOAD ARTIFACT
+      #
+      # Artifact persists beyond the current runner/job.
+      # Another job can download this exact output.
+      # --------------------------------------------------------
+      - name: Upload application artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: node-webapp
+          path: deployment/
 
 
   # ==========================================================
@@ -88,43 +107,42 @@ jobs:
   # ==========================================================
   verify:
 
-    # This creates a dependency between jobs.
+    # This creates the dependency:
     #
-    # The verify job will start only after ALL matrix
-    # executions of the build job have completed.
+    # build
+    #   ↓
+    # verify
+    #
+    # verify starts only after build succeeds.
     needs: build
 
     runs-on: ubuntu-latest
 
     steps:
 
-    # --------------------------------------------------------
-    # 7. DOWNLOAD ARTIFACT
-    # --------------------------------------------------------
-    - name: Download Node 20 artifact
-      uses: actions/download-artifact@v5
-      with:
-        name: build-20.x
-        path: downloaded/node-20
+      # --------------------------------------------------------
+      # 8. DOWNLOAD ARTIFACT
+      #
+      # The runner for this job is a NEW runner.
+      # It doesn't have the files created in the build job.
+      #
+      # The artifact is how we transfer the build output.
+      # --------------------------------------------------------
+      - name: Download application artifact
+        uses: actions/download-artifact@v5
+        with:
+          name: node-webapp
+          path: downloaded/
 
-    - name: Download Node 22 artifact
-      uses: actions/download-artifact@v5
-      with:
-        name: build-22.x
-        path: downloaded/node-22
 
-    # --------------------------------------------------------
-    # 8. VERIFY ARTIFACT CONTENT
-    # --------------------------------------------------------
-    - name: Display downloaded files
-      run: |
-        echo "Downloaded artifacts:"
-        find downloaded -type f
+      # --------------------------------------------------------
+      # 9. VERIFY ARTIFACT
+      # --------------------------------------------------------
+      - name: Display downloaded files
+        run: |
+          echo "Downloaded application:"
+          find downloaded -type f
 
-        echo ""
-        echo "Node 20 build:"
-        cat downloaded/node-20/build-info.txt
-
-        echo ""
-        echo "Node 22 build:"
-        cat downloaded/node-22/build-info.txt
+          echo ""
+          echo "package.json:"
+          cat downloaded/package.json

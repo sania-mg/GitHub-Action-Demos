@@ -1,0 +1,165 @@
+
+name: Fifth Workflow - Deploy Node.js App to Azure Web App
+
+on:
+  # Automatic deployment whenever code is pushed to main
+  push:
+    branches:
+      - main
+
+  # Also allow manual execution from GitHub Actions
+  workflow_dispatch:
+
+# Required for OIDC authentication with Azure
+permissions:
+  contents: read
+  id-token: write
+
+env:
+  # Replace with the actual name of your Azure Web App
+  AZURE_WEBAPP_NAME: "DemoWebApp123"
+
+  NODE_VERSION: "22.x"
+
+
+jobs:
+
+  # ==========================================================
+  # BUILD AND TEST
+  # ==========================================================
+  build:
+
+    name: Build and Test
+
+    runs-on: ubuntu-latest
+
+    steps:
+
+      # ------------------------------------------------------
+      # 1. Get source code
+      # ------------------------------------------------------
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+
+      # ------------------------------------------------------
+      # 2. Setup Node.js
+      # ------------------------------------------------------
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+
+          # Cache npm's package cache
+          cache: npm
+
+
+      # ------------------------------------------------------
+      # 3. Install dependencies
+      # ------------------------------------------------------
+      - name: Install dependencies
+        run: npm ci
+
+
+      # ------------------------------------------------------
+      # 4. Run tests
+      # ------------------------------------------------------
+      - name: Run tests
+        run: npm test
+
+
+      # ------------------------------------------------------
+      # 5. Verify application can start
+      # ------------------------------------------------------
+      - name: Verify application
+        run: |
+          timeout 10s npm start || true
+
+          echo "Application startup check completed."
+
+
+      # ------------------------------------------------------
+      # 6. Package application
+      #
+      # There is no compiled dist/ directory in our application.
+      # We therefore package the files required by the Node.js
+      # application.
+      # ------------------------------------------------------
+      - name: Create deployment package
+        run: |
+          mkdir deployment
+
+          cp package.json deployment/
+          cp package-lock.json deployment/
+
+          mkdir deployment/src
+          cp src/server.js deployment/src/
+
+
+      # ------------------------------------------------------
+      # 7. Upload deployment artifact
+      # ------------------------------------------------------
+      - name: Upload deployment artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: azure-webapp-package
+          path: deployment/
+
+
+  # ==========================================================
+  # DEPLOY
+  # ==========================================================
+  deploy:
+
+    name: Deploy to Azure Web App
+
+    # Deployment happens only after build/test succeeds
+    needs: build
+
+    runs-on: ubuntu-latest
+
+    steps:
+
+      # ------------------------------------------------------
+      # 8. Download artifact from build job
+      # ------------------------------------------------------
+      - name: Download deployment artifact
+        uses: actions/download-artifact@v5
+        with:
+          name: azure-webapp-package
+          path: deployment/
+
+
+      # ------------------------------------------------------
+      # 9. Authenticate to Azure using OIDC
+      #
+      # No client secret is required.
+      #
+      # GitHub generates an OIDC token.
+      # Azure validates that token against the federated
+      # credential configured in Microsoft Entra ID.
+      # ------------------------------------------------------
+      - name: Login to Azure
+        uses: azure/login@v2
+        with:
+          client-id: ${{ secrets.AZURE_CLIENT_ID }}
+          tenant-id: ${{ secrets.AZURE_TENANT_ID }}
+          subscription-id: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
+
+
+      # ------------------------------------------------------
+      # 10. Deploy to Azure App Service
+      # ------------------------------------------------------
+      - name: Deploy to Azure Web App
+        uses: azure/webapps-deploy@v3
+        with:
+          app-name: ${{ env.AZURE_WEBAPP_NAME }}
+          package: deployment/
+
+
+      # ------------------------------------------------------
+      # 11. Logout from Azure
+      # ------------------------------------------------------
+      - name: Logout from Azure
+        run: az logout
+

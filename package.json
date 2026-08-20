@@ -1,12 +1,13 @@
 {
-  "name": "github-actions-node-demo",
+  "name": "github-actions-azure-webapp-demo",
   "version": "1.0.0",
-  "description": "Demo project for GitHub Actions CI, caching and artifacts",
-  "main": "src/index.js",
+  "description": "Node.js application deployed to Azure App Service using GitHub Actions",
+  "main": "src/server.js",
   "scripts": {
-    "build": "mkdir -p dist && cp src/index.js dist/index.js && echo \"Build completed successfully\" > dist/build-info.txt",
-    "test": "node --test src/index.test.js"
+    "start": "node src/server.js",
+    "test": "node --test src/server.test.js"
   },
-  "dependencies": {},
-  "devDependencies": {}
+  "engines": {
+    "node": "22.x"
+  }
 }
