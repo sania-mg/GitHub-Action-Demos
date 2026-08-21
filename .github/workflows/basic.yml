@@ -1,5 +1,9 @@
 name : Basic Workflow
-on: push
+on: 
+  push: # on pushing the code on the main branch 
+  workflow_dispatch: # manually
+  
+    
 jobs:
   Hello-Job:
     runs-on: ubuntu-latest
