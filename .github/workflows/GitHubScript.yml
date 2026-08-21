@@ -1,0 +1,22 @@
+
+name: Issue Comment Github Script
+on:
+ issues:
+   types: [opened]
+permissions:
+  issues: write
+
+jobs:
+ comment:
+  runs-on: ubuntu-latest
+  steps:
+    - uses: actions/github-script@v8
+      with:
+        # github-token: ${{ secrets.GITHUB_TOKEN }}
+        script: |
+         await github.rest.issues.createComment({
+             owner: context.repo.owner,
+             repo: context.repo.repo,
+             issue_number: context.issue.number,
+            body: "👋 Thanks for opening this issue! We’ll take a look soon."
+           });
